@@ -10,7 +10,8 @@ fi
 
 # Global variable definition
 vyos_iso_local=/tmp/vyos.iso
-vyos_iso_url=http://packages.vyos.net/iso/release/${VYOS_VERSION}/vyos-${VYOS_VERSION}-amd64.iso
+# vyos_iso_url=http://packages.vyos.net/iso/release/${VYOS_VERSION}/vyos-${VYOS_VERSION}-amd64.iso
+vyos_iso_url=http://downloads.vyos.io/rolling/current/amd64/vyos-${VYOS_VERSION}-amd64.iso
 
 CD_ROOT=/mnt/cdrom
 CD_SQUASH_ROOT=/mnt/cdsquash
@@ -23,13 +24,13 @@ WRITE_ROOT=/mnt/wroot
 READ_ROOT=/mnt/squashfs
 INSTALL_ROOT=/mnt/inst_root
 
-# Fetch GPG key and VyOS image
+# # Fetch GPG key and VyOS image
 curl -sSLfo ${vyos_iso_local} ${vyos_iso_url}
-curl -sSLfo ${vyos_iso_local}.asc ${vyos_iso_url}.asc
-curl -sSLf http://packages.vyos.net/vyos-release.gpg | gpg --import
+# curl -sSLfo ${vyos_iso_local}.asc ${vyos_iso_url}.asc
+# curl -sSLf http://packages.vyos.net/vyos-release.gpg | gpg --import
 
-# Verify ISO is valid
-gpg --verify ${vyos_iso_local}.asc ${vyos_iso_local}
+# # Verify ISO is valid
+# gpg --verify ${vyos_iso_local}.asc ${vyos_iso_local}
 
 # Mount ISO
 mkdir -p ${CD_ROOT}
