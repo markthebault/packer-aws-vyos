@@ -1,0 +1,3 @@
+#!/bin/bash
+# extract the AMI id's from the packer.log and print in a YAML-ready format
+tail -n 1 packer.log | sed -n 's/.*\(ami-.\{8\}\).*/\1/p'

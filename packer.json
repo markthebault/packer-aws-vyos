@@ -1,0 +1,55 @@
+{
+  "variables": {
+    "vyos_version": "1.1.7",
+    "ami_groups": "all",
+    "subnet_id": "{{env `SUBNET_ID`}}",
+    "vpc_id": "{{env `VPC_ID`}}",
+    "ubuntu_ami": "{{env `BASE_AMI`}}",
+    "aws_region": "{{env `REGION`}}"
+  },
+  "builders": [
+  {
+    "type": "amazon-ebssurrogate",
+    "ami_name": "Packer-VyOS-{{user `vyos_version`}}",
+    "ami_description": "VyOS {{user `vyos_version`}} image build using Packer from official ISO (https://github.com/Luzifer/packer-vyos)",
+    "ami_groups": "{{user `ami_groups`}}",
+    "ami_virtualization_type": "hvm",
+    "region": "{{user `aws_region`}}",
+    "ssh_username": "ubuntu",
+    "instance_type": "t2.medium",
+    "source_ami": "{{user `ubuntu_ami`}}",
+    "vpc_id": "{{user `vpc_id`}}",
+    "subnet_id": "{{user `subnet_id`}}",
+    "associate_public_ip_address": true,
+    "launch_block_device_mappings": [
+      {
+        "volume_type": "gp2",
+        "device_name": "/dev/xvdf",
+        "delete_on_termination": false,
+        "volume_size": 4
+      }
+    ],
+    "ami_root_device": {
+      "source_device_name": "/dev/xvdf",
+      "device_name": "/dev/xvda",
+      "delete_on_termination": true,
+      "volume_size": 4,
+      "volume_type": "gp2"
+    }
+  }
+],
+"provisioners": [
+  {
+    "type": "file",
+    "source": "ec2-fetch-ssh-public-key",
+    "destination": "/tmp/ec2-fetch-ssh-public-key"
+  },
+  {
+    "type": "shell",
+    "script": "provision.sh",
+    "environment_vars": [
+      "VYOS_VERSION={{user `vyos_version`}}"
+    ]
+  }
+]
+}
