@@ -1,7 +1,7 @@
 {
   "variables": {
-    "vyos_version": "1.2.0",
-    "vyos_version_full": "1.2.0-rolling+201906131702",
+    "vyos_version": "{{env `VYOS_VERSION`}}",
+    "vyos_iso_url": "{{env `VYOS_ISO_URL`}}",
     "ami_groups": "all",
     "subnet_id": "{{env `SUBNET_ID`}}",
     "vpc_id": "{{env `VPC_ID`}}",
@@ -12,7 +12,7 @@
     {
       "type": "amazon-ebssurrogate",
       "ami_name": "Packer-VyOS-{{user `vyos_version`}}",
-      "ami_description": "VyOS {{user `vyos_version`}} image build using Packer from official ISO (https://github.com/Luzifer/packer-vyos)",
+      "ami_description": "VyOS {{user `vyos_version`}} image build using Packer from official ISO",
       "ami_groups": "{{user `ami_groups`}}",
       "ami_virtualization_type": "hvm",
       "region": "{{user `aws_region`}}",
@@ -49,7 +49,8 @@
       "type": "shell",
       "script": "provision.sh",
       "environment_vars": [
-        "VYOS_VERSION={{user `vyos_version_full`}}"
+        "VYOS_VERSION={{user `vyos_version`}}",
+        "VYOS_ISO_URL={{user `vyos_iso_url`}}"
       ]
     }
   ]

@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -ex
 set -o pipefail
 
@@ -9,8 +10,8 @@ fi
 
 # Global variable definition
 vyos_iso_local=/tmp/vyos.iso
+# vyos_iso_url=http://packages.vyos.net/iso/release/${VYOS_VERSION}/vyos-${VYOS_VERSION}-amd64.iso
 vyos_iso_url=${VYOS_ISO_URL}
-
 
 CD_ROOT=/mnt/cdrom
 CD_SQUASH_ROOT=/mnt/cdsquash
@@ -23,12 +24,12 @@ WRITE_ROOT=/mnt/wroot
 READ_ROOT=/mnt/squashfs
 INSTALL_ROOT=/mnt/inst_root
 
-# Fetch GPG key and VyOS image
+# # Fetch GPG key and VyOS image
 curl -sSLfo ${vyos_iso_local} ${vyos_iso_url}
 # curl -sSLfo ${vyos_iso_local}.asc ${vyos_iso_url}.asc
 # curl -sSLf http://packages.vyos.net/vyos-release.gpg | gpg --import
 
-# Verify ISO is valid
+# # Verify ISO is valid
 # gpg --verify ${vyos_iso_local}.asc ${vyos_iso_local}
 
 # Mount ISO
@@ -44,7 +45,9 @@ mkdir -p ${CD_SQUASH_ROOT}
 mount -t squashfs -o loop,ro ${SQUASHFS_IMAGE} ${CD_SQUASH_ROOT}
 
 # Obtain version information
-vyos_version=$(awk '/^vyatta-version/{print $2}' ${CD_ROOT}/live/filesystem.packages)
+vyos_version=$(cat ${CD_SQUASH_ROOT}/opt/vyatta/etc/version | awk '{print $2}' | tr + -)
+echo "VyOs version is :${vyos_version}"
+# vyos_version=$(awk '/^vyatta-version/{print $2}' ${CD_ROOT}/live/filesystem.packages)
 
 # Prepare EBS volume
 parted --script ${VOLUME_DRIVE} mklabel msdos
@@ -70,26 +73,66 @@ mkdir -p ${INSTALL_ROOT}
 mkdir -p ${WRITE_ROOT}/boot/${vyos_version}/work
 mount -t overlay -o "noatime,upperdir=${WRITE_ROOT}/boot/${vyos_version}/live-rw,lowerdir=${READ_ROOT},workdir=${WRITE_ROOT}/boot/${vyos_version}/work" none ${INSTALL_ROOT}
 
+## ---- VyOS configuration ----
 # Make sure that config partition marker exists
 touch ${INSTALL_ROOT}/opt/vyatta/etc/config/.vyatta_config
 
-# Copy default config file to config directory
-chroot --userspec=root:vyattacfg ${INSTALL_ROOT} cp /opt/vyatta/etc/config.boot.default /opt/vyatta/etc/config/config.boot
-chmod 0775 ${INSTALL_ROOT}/opt/vyatta/etc/config/config.boot
 
-### Modify config to meet AWS EC2 AMI requirements
+# Copy the default config for EC2 to the installed image
+cat -s <<EOF > ${INSTALL_ROOT}/opt/vyatta/etc/config/config.boot
+service {
+    ssh {
+        client-keepalive-interval "180"
+        disable-password-authentication {
+        }
+        port "22"
+    }
+}
+system {
+    host-name VyOS-AMI
+    login {
+        user vyos {
+            authentication {
+                encrypted-password "*"
+                plaintext-password ""
+            }
+            level admin
+        }
+    }
+    syslog {
+        global {
+            facility all {
+                level notice
+            }
+            facility protocols {
+                level debug
+            }
+        }
+    }
+    ntp {
+        server "0.pool.ntp.org"
+        server "1.pool.ntp.org"
+        server "2.pool.ntp.org"
+    }
+    config-management {
+        commit-revisions 100
+    }
+    console {
+        device ttyS0 {
+            speed 9600
+        }
+    }
+}
+interfaces {
+    ethernet eth0 {
+        address dhcp
+    }
+    loopback lo
+}
+EOF
 
-# Add interface eth0 and set address to dhcp
-sed -i '/interfaces {/ a\    ethernet eth0 {\n\        address dhcp\n\    }' ${INSTALL_ROOT}/opt/vyatta/etc/config/config.boot
-
-# Add service ssh and disable-password-authentication
-sed -i '/system {/ iservice {\n\    ssh {\n\        disable-password-authentication\n\        port 22\n\    }\n}' ${INSTALL_ROOT}/opt/vyatta/etc/config/config.boot
-
-# Set system host-name to VyOS-AMI
-sed -i '/login {/ i\    host-name VyOS-AMI' ${INSTALL_ROOT}/opt/vyatta/etc/config/config.boot
-
-# Change system login user vyos encrypted-password to '*'
-sed -i '/encrypted-password/ c\                encrypted-password "*"' ${INSTALL_ROOT}/opt/vyatta/etc/config/config.boot
+# Install ec2 init script. This isn't actually used, but left here for easy development of this script.
+cp /tmp/ec2-fetch-ssh-public-key ${INSTALL_ROOT}/etc/init.d/ec2-fetch-ssh-public-key
 
 ### Install GRUB boot loader
 
@@ -107,19 +150,19 @@ chroot ${INSTALL_ROOT} grub-install --no-floppy --root-directory=/boot ${VOLUME_
 cat -s <<EOF > ${WRITE_ROOT}/boot/grub/grub.cfg
 set default=0
 set timeout=0
+
 menuentry "VyOS AMI (HVM) ${vyos_version}" {
-  linux /boot/${vyos_version}/vmlinuz boot=live quiet vyatta-union=/boot/${vyos_version} console=ttyS0
+  linux /boot/${vyos_version}/vmlinuz boot=live selinux=0 vyos-union=/boot/${vyos_version} console=tty1
   initrd /boot/${vyos_version}/initrd.img
 }
 EOF
 
-# Install ec2 init script
-cp /tmp/ec2-fetch-ssh-public-key ${INSTALL_ROOT}/etc/init.d/ec2-fetch-ssh-public-key
+# Create the persistence config
+cat -s <<EOF > ${WRITE_ROOT}/persistence.conf
+/ union
+EOF
 
-# Configure fstab for tmpfs
-echo 'tmpfs /var/run tmpfs nosuid,nodev 0 0' > ${INSTALL_ROOT}/etc/fstab
-
-# Unmount everything
+# ---- Unmount all mounts ----
 cd
 for path in boot dev sys proc; do
   umount ${INSTALL_ROOT}/${path}
@@ -130,12 +173,3 @@ umount ${READ_ROOT}
 umount ${WRITE_ROOT}
 umount ${CD_SQUASH_ROOT}
 umount ${CD_ROOT}
-
-
-
-
-
-
-
-
-
